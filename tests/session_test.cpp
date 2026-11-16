@@ -171,7 +171,7 @@ int main() {
 
     // The link drops; the client goes on changing its world (one change too big for a datagram), then it's back.
     client.keep_offline(true);
-    client.cut_link(6000);
+    client.cut_link(16000);
     {
         net::ItemGoneMsg g;  // sent before the session notices: unacked when it times out, so it must go again
         g.scene = "LakeRegion";
@@ -180,7 +180,7 @@ int main() {
         net::write_item_gone(w, g);
         client.send_packet(w, true);
     }
-    pump(host, client, 5500);  // both time out after 5 s; the client says hello again only after 6
+    pump(host, client, 15500);  // both time out after 15 s; the client says hello again only after 16
     if (host.status().connected || client.status().connected) {
         printf("FAIL: the link didn't drop\n");
         ++failures;
@@ -254,11 +254,11 @@ int main() {
                "host before CaughtUp\n");
     }
 
-    // The host stalls for 5.5 s: the client times out and says hello again, while the host (its socket full of the
+    // The host stalls for 15.5 s: the client times out and says hello again, while the host (its socket full of the
     // client's packets) never noticed. The new connection numbers its reliable messages afresh; none may be lost.
     {
         const uint32_t before = link_of(host.status(), 1);
-        const double until = net::now_ms() + 5500;
+        const double until = net::now_ms() + 15500;
         while (net::now_ms() < until) {
             client.update();
             Sleep(1);
@@ -466,8 +466,8 @@ int main() {
                 printf("ok: LET IN connects a friend; TURN AWAY tells the other one, which stops trying\n");
             }
         }
-        asker.cut_link(5500);
-        pump_all(group, 5500);
+        asker.cut_link(15500);
+        pump_all(group, 15500);
         for (int i = 0; i < 700 && !asker.status().connected; ++i) pump_all(group, 10);
         {
             const net::Status hs = ahost.status();
@@ -481,7 +481,7 @@ int main() {
         }
         const uint32_t serial = ahost.status().players.empty() ? 0 : ahost.status().players[0].link;
         const bool kicked = serial && ahost.turn_away(serial);
-        pump_all(group, 7000);  // longer than a timeout and a hello: it must not come back
+        pump_all(group, 17000);  // longer than a timeout and a hello: it must not come back
         {
             const net::Status hs = ahost.status(), as = asker.status();
             if (!kicked || as.connected || !as.turned_away || !hs.players.empty() || !hs.asking.empty()) {
