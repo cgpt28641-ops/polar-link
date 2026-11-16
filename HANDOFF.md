@@ -1882,6 +1882,8 @@ Everything the chat that ran Discord, the summaries and the train fixes (12.11�
   for 16:00 next day). Each check also looks for new commits on polar-link main/server from other chats and describes
   them on #updates. Also check whenever Karol writes "dc". "Nie sprawdzaj dziś" = stop until 16:00 next day.
 - Every day at 24:00 a post on #podsumowanie: the date + changes with ✅ works / 🧪 untested / ❌ open + DLL link.
+- **Files (Karol 16.11 22:28):** changed SERVER files (polar-link-server: tldserver.exe, tools/*.py, *.bat...) go to
+  Karol in the chat (SendUserFile), not to Discord; MOD files (winhttp.dll) go to Discord as before (#updates + link).
 - **#chat (Karol 16.11 22:26): only the server's local model answers a mention there, Claude doesn't.** The bridge no
   longer puts #chat mentions into mentions.lst (tldcoop-discord, 16.11). Claude still reads #chat for context and
   answers mentions on the other channels.
