@@ -30,6 +30,10 @@ constexpr double kHelloIntervalMs = 500;
 constexpr double kStateIntervalMs = 50;  // 20 Hz
 constexpr double kPingIntervalMs = 1000;
 constexpr double kTimeoutMs = 5000;
+// TLDCoop_DLC (16.11, the dedicated server on Wi-Fi with Tailscale: all three players dropped at once at 22:30, the
+// link quiet a few seconds; Shatsca twice more on his own): a link counts as dropped after this long without a packet
+// (5 s before). A game that really went away still comes back as a new connection at once ("came back").
+constexpr double kLinkTimeoutMs = 15000;
 constexpr double kProfileIntervalMs = 2000;  // UDP can drop it; repeating is simpler than acks
 constexpr double kRosterIntervalMs = 2000;   // host: who's in the game, likewise
 constexpr double kBusyRetryMs = 1000;        // host full: ask again shortly (someone may leave)
@@ -1057,7 +1061,7 @@ struct Session::Impl {
         }
 
         for (Link& l : links)
-            if (!l.gone && l.connected && now - l.last_recv > kTimeoutMs) on_disconnected(l, "timed out (no packets for 5 s)");
+            if (!l.gone && l.connected && now - l.last_recv > kLinkTimeoutMs) on_disconnected(l, "timed out (no packets for 15 s)");
         drop_gone();
         for (auto it = asking.begin(); it != asking.end();) {
             if (now - it->last_hello <= kTimeoutMs) {
