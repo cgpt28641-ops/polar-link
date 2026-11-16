@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "coop_server.h"
 #include "game_state.h"
 #include "hooks.h"
 #include "il2cpp_api.h"
@@ -104,6 +105,12 @@ bool joined() {
     const auto role = netrt::role();
     return role && *role == net::Role::Client;
 }
+// TLDCoop_DLC (Shatsca 16.11 on the dedicated server: "after killing the wolf I can't harvest its carcass, Szymon
+// can"): the server is a host that is never in a scene, so no game keeps everyone's carcasses. Each game is the host of
+// the carcasses of the animals it runs there: it lists them to the server, which passes them to the others in that
+// scene (as a host's list) and sends their harvests and quarterings back to it.
+bool on_server() { return joined() && coop_server::linked(); }
+uint32_t g_server_link = 0;  // (the server's link: our acks of the harvests it passes on)
 
 double now_ms() {
     LARGE_INTEGER f, c;
@@ -384,7 +391,7 @@ uint32_t carcass_id(Il2CppObject* ai) {
     return id;
 }
 
-void send_carcasses(double now) {
+void send_carcasses(double now, bool server = false) {
     if (now - g_last_send < kSendMs) return;
     g_last_send = now;
     const std::string scene = game::active_scene();
@@ -406,6 +413,7 @@ void send_carcasses(double now) {
     const bool tell = now - g_last_skip_log > kSkipLogMs;
     for (Il2CppObject* ai : all_animals()) {
         if (get<int32_t>(ai, api.ai_mode) != kAiModeDead) continue;
+        if (server && (!in_world(ai) || !wildlife_sync::owned_here(ai))) continue;  // (only the ones we run)
         Il2CppObject* bh = get<Il2CppObject*>(ai, api.ai_body);
         const uint32_t id = in_world(ai) ? carcass_id(ai) : wildlife_sync::host_animal_id(ai);
         if (!id || !bh || !behaviour_enabled(bh)) {
@@ -450,6 +458,27 @@ void send_carcasses(double now) {
         g_last_skipped = no_id + no_body + body_off;
         logx::info("wildlife: %zu carcass(es) listed for the others; not listed: %d without our id, %d without a body, "
                    "%d with its body switched off (%d put away)", list.size(), no_id, no_body, body_off, away);
+    }
+    if (server) {  // one list, to the server; its harvest_ack: the newest harvest it passed on that is counted here
+        if (list.empty()) return;
+        auto& acks = acks_of(0, g_server_link);
+        for (net::CarcassRec& c : list) {
+            const auto ack = acks.find(c.animal);
+            c.harvest_ack = ack == acks.end() ? 0 : ack->second;
+        }
+        for (size_t at = 0; at < list.size(); at += kPerPacket) {
+            const std::vector<net::CarcassRec> part(list.begin() + static_cast<ptrdiff_t>(at),
+                                                    list.begin() + static_cast<ptrdiff_t>(std::min(list.size(), at + kPerPacket)));
+            net::Writer w(net::Msg::Carcasses);
+            net::write_carcasses(w, part);
+            netrt::send_packet(w, false);
+        }
+        static size_t told = 0;
+        if (list.size() != told) {
+            told = list.size();
+            logx::info("wildlife: %zu carcass(es) of the animals we run listed for the others (through the server)", told);
+        }
+        return;
     }
     // Each friend's list says which of its own harvests are counted. A friend back from a dropped link gets it once
     // what it did meanwhile is in (caught up): before, our list would bring back a carcass it quartered offline.
@@ -743,6 +772,7 @@ void receive_carcasses(double now) {
     for (const net::CarcassRec& c : all) listed.insert(c.animal);
     const std::string scene = game::active_scene();
     for (net::CarcassRec& c : all) {
+        if (on_server() && wildlife_sync::host_animal(c.animal)) continue;  // (we run it: the real one is ours)
         auto it = g_locals.find(c.animal);
         if (it == g_locals.end()) {
             if (g_quartered.count(c.animal) || rekey_local(c, listed, scene)) {
@@ -813,6 +843,11 @@ void update_locals(double now) {
         Il2CppObject* bh = target(l.bh);
         if (!bh || !alive(bh)) {  // quartered here (TLD destroyed it), or gone with the scene
             drop_local(it->first, l, "no longer here", false);
+            it = g_locals.erase(it);
+            continue;
+        }
+        if (on_server() && wildlife_sync::host_animal(it->first)) {  // handed to us: our own body takes its place
+            drop_local(it->first, l, "we run that animal now", true);
             it = g_locals.erase(it);
             continue;
         }
@@ -1199,7 +1234,7 @@ void on_frame(bool in_game) {
     const double now = now_ms();
     run_test(now);
     if (in_game && runs_scene()) small_game_to_items(now);
-    if (!hosting() && (!g_owed.empty() || !g_listed.empty())) {  // TLDCoop_DLC: (a host's alone)
+    if (!hosting() && !on_server() && (!g_owed.empty() || !g_listed.empty())) {  // TLDCoop_DLC: (a host's alone)
         g_owed.clear();
         g_listed.clear();
     }
@@ -1220,6 +1255,24 @@ void on_frame(bool in_game) {
             if (r.ok()) apply_quartered(id, p.from, p.link, now);
         }
         return;
+    }
+    if (on_server()) {  // TLDCoop_DLC: the host of our own carcasses (see on_server)
+        if (in_game) send_carcasses(now, true);
+        std::vector<net::Packet> packets;
+        netrt::drain_packets(net::Msg::Harvest, packets);
+        for (const net::Packet& p : packets) {
+            net::Reader r = net::packet_body(p);
+            net::HarvestMsg h;
+            g_server_link = p.link;
+            if (net::read_harvest(r, h)) apply_harvest(h, p.from, p.link, now);
+        }
+        packets.clear();
+        netrt::drain_packets(net::Msg::Quartered, packets);
+        for (const net::Packet& p : packets) {
+            net::Reader r = net::packet_body(p);
+            const uint32_t id = r.get<uint32_t>();
+            if (r.ok()) apply_quartered(id, p.from, p.link, now);
+        }
     }
     const HostLink link = joined() && in_game ? host_link(now) : HostLink::None;
     const bool hearing = link == HostLink::Hearing;
@@ -1249,7 +1302,7 @@ void on_frame(bool in_game) {
     }
     if (g_away_logged) g_regrace_until = now + kRegraceMs;  // TLDCoop_DLC: (the host is back: see rekey_local)
     g_away_logged = false;
-    if (!joined() || !in_game || !wildlife_sync::mirroring()) {
+    if (!joined() || !in_game || !(wildlife_sync::mirroring() || on_server())) {
         if (!g_locals.empty()) clear_locals("not mirroring the host's animals");
         std::vector<net::Packet> stale;
         netrt::drain_packets(net::Msg::Carcasses, stale);
