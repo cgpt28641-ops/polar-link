@@ -1903,3 +1903,25 @@ Everything the chat that ran Discord, the summaries and the train fixes (12.11�
 - The old chat's scheduled tasks (they fire into the OLD chat): 24:00 summary (trig_018fC8JELg8P1uN6F9LQVVcj, 17.11
   00:00) and the 16:00 Discord check (trig_018FzUgyJdVUugV2VrNd9iDk, 17.11 16:00). If the new chat takes over, delete
   those there (delete_trigger) and start its own chain, or the two chats both post.
+
+## 16.11 23:20 — dedicated server: carcasses for everyone, 15 s link timeout, hunters logged (mod 515a20c, server 126dceb)
+Karol 16.11 22:55: this chat now runs everything (mod and server). First game on the server 16.11 22:08–23:04
+(Shatsca, Kerel, Szymon; logs 22:16 on #błędy, tldserver.log + server_bot.log from Karol).
+- **Shatsca REPORT #05cc6c39 "after killing the wolf I can't harvest it, Szymon can".** The wolf was run by
+  Szymon's game; carcasses were only ever shared by a host's game, and the server is never in a scene. Now
+  (wildlife_carcass.cpp `on_server()`) each game is the host of the carcasses of the animals it runs: it lists them
+  to the server (Msg::Carcasses, client->server now too), the server (server/wildlife.cpp `pass_carcasses`) passes
+  them to the others in that scene, and Harvest / Quartered from the others go to the game that runs the animal with
+  the server's own seqs (`pass_harvest`, `harvests_passed_`), whose acks come back as each harvester's own seq. A
+  carcass handed to us drops our mirror of it. No protocol bump (52). Server test in tests/wildlife_test.cpp.
+- **Drops**: tldserver.log 22:30:03–22:30:31 all three players' links went quiet at once (the server PC is on Wi-Fi,
+  players via Tailscale), Shatsca alone again 23:02 and 23:03. A link now counts as dropped after **15 s** without a
+  packet (was 5; net/session.cpp kLinkTimeoutMs; session_test adjusted). Server and every player need the new build.
+  The server's PC on a cable would help most.
+- **Shatsca REPORT #8cc06335 "the wolves ignore us"**: not found yet. The server did hand wolves to the player they
+  were after 9 times, then they went to someone "looking at it" within a minute (no longer engaged). New log line in
+  every game: `wildlife: our wolf #id near a player (N m): mode M, after X, hp` every 3 s per hunter within 40 m (the
+  first 400). Next report: read those (mode numbers: 1 Attack, 13 Stalking, 15 Wander, 4 Flee, 6 HoldGround).
+- Also seen (not fixed): wildlife_targets on a game that isn't the host ends a fight with a friend at once
+  (`hosting()` in the g_fights loop) - by design the animal goes to that friend's game first.
+- UNTESTED in the game. tldserver.exe given to Karol in the chat (his rule: server files in the chat, mod on Discord).
