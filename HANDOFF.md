@@ -1829,3 +1829,13 @@ work below) was fast-forwarded into main; **no protocol bump** (52). With a host
   Steam codes.
 - The workflow still has the step for the branch `server` (release dll-server); main's dll-latest now has all of it.
 - UNTESTED in the game (CI tests only).
+
+## 16.11 21:20 — the dedicated server's newest mod side goes to main (Karol: "daj ten winhttp.dll już jako gotowy do głównego repo")
+Branch `server` merged into main again (still protocol 52). New in main since 704e7a6 (details in the project doc
+`claude/HANDOFF_SERVER_TEST1.md` and `_ADD.md`):
+- wildlife_owner.inc: a dedicated server isn't counted as a player for [wildlife] per_player; animals TLD had
+  switched off when we came count as there on arrival (hidden first, `g_hidden_at` / `kHiddenSettleMs`), so coming
+  back to a scene doesn't double them. **This also changes host mode** (the same doubling could happen there).
+- world_containers.cpp: [loot] per_player extra loot on a dedicated server too (the first game to search rolls).
+- coop_sleep.cpp + protocol.h: `SleepOp::Clock` (a player's dawn / dusk -> the server only).
+- UNTESTED in the game. Checklist for Karol: DO_SPRAWDZENIA_SERWER.md.
