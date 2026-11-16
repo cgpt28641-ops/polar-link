@@ -1425,6 +1425,32 @@ void own_capture(const std::string& scene, const std::vector<Present>& players, 
             }
         net::AnimalRec a = own_record(ai, id, own.epoch, pos, euler);
         a.region = own.region;
+        {
+            // TLDCoop_DLC (Shatsca 16.11 on the dedicated server: "the wolves ignore us, they pass by"): a hunter of ours
+            // near a player, what it does (every 3 s each, the first 400 lines), for the next report
+            static int lines = 0;
+            static std::unordered_map<uint32_t, double> last;
+            const int kind = static_cast<int>(a.kind);
+            const bool hunter = kind == 1 || kind == 2 || kind == 6;  // wolf, bear, cougar
+            if (hunter && a.hp > 0 && lines < 400 && now - last[id] >= 3000) {
+                float nearest = 1e9f;
+                const game::PlayerState me = game::read_player();
+                if (me.valid) {
+                    const float dx = pos.x - me.position.x, dz = pos.z - me.position.z;
+                    nearest = std::sqrt(dx * dx + dz * dz);
+                }
+                for (const Vector3& f : g_friend_spots) {
+                    const float dx = pos.x - f.x, dz = pos.z - f.z;
+                    nearest = std::min(nearest, std::sqrt(dx * dx + dz * dz));
+                }
+                if (nearest <= 40.0f) {
+                    last[id] = now;
+                    ++lines;
+                    logx::info("wildlife: our %s #%u near a player (%.0f m): mode %u, after %s, hp %.0f", kind_name(kind), id,
+                               nearest, a.mode, who_name(a.target).c_str(), a.hp);
+                }
+            }
+        }
         auto emitters = g_ai_emitters.find(key);
         if (emitters == g_ai_emitters.end()) emitters = g_ai_emitters.emplace(key, wwise_emitters(go)).first;
         for (size_t e = 0; e < emitters->second.size(); ++e) owners[emitters->second[e]] = {a.id, static_cast<uint8_t>(e)};
