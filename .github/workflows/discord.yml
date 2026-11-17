@@ -55,7 +55,7 @@ jobs:
         run: |
           # (17.11) on a failure only the error's kind and where, never what it was about (this log is public)
           if python3 bridge.py . > /dev/null 2> err.txt; then echo "bridge ok"; else
-            echo "bridge FAILED: $(grep -E '^[A-Za-z]+(Error|Exception)' err.txt | tail -1 | cut -d: -f1) at $(grep -oE 'line [0-9]+, in [a-z_]+' err.txt | tail -3 | tr '\n' ' ')"; exit 1; fi
+            echo "bridge FAILED: $(grep -E '^[A-Za-z]+(Error|Exception)' err.txt | tail -1 | cut -d: -f1) $(grep -oE 'HTTP [0-9]+' err.txt | tail -1) at $(grep -oE 'line [0-9]+, in [a-z_]+' err.txt | tail -3 | tr '\n' ' ')"; exit 1; fi
       # Karol 11.11: the messages go into git only sealed (encrypted). If sealing fails nothing is saved.
       - name: Seal
         if: steps.pc.outputs.skip != '1'
