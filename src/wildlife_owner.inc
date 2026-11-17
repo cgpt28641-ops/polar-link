@@ -999,7 +999,17 @@ void take_local(const net::WildCtlMsg& t, double now) {
         if (!spawned) kill_now(ai);
     } else {
         bool has_target = false;
-        if (s.target != net::kNoPlayer && s.target == me && api.ai_player_target >= 0 && api.ai_current_target >= 0) {
+        // TLDCoop_DLC (Shatsca 17.11: "back on the server a wolf jumped me at once and I died"): in the first 20 s in a
+        // scene (a game just loaded or came back) an animal handed to us isn't after our player yet: it wanders on
+        // and TLD's own senses find us, as on arrival in any region
+        const bool just_came = now - g_own_arrived_ms < 20000;
+        if (just_came && s.target == me && aggressive(mode)) {
+            static int told = 0;
+            if (told++ < 20)
+                logx::info("wildlife: #%u was after us when it was handed over, %.0f s after we came: it wanders instead",
+                           t.id, (now - g_own_arrived_ms) / 1000.0);
+            mode = kAiModeWander;
+        } else if (s.target != net::kNoPlayer && s.target == me && api.ai_player_target >= 0 && api.ai_current_target >= 0) {
             il2::store_ref(ai, api.ai_current_target, il2::read_field<Il2CppObject*>(ai, api.ai_player_target));
             has_target = true;
         } else if (s.target != net::kNoPlayer && hosting_now() && api.ai_current_target >= 0) {
