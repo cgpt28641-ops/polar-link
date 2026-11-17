@@ -1925,3 +1925,13 @@ Karol 16.11 22:55: this chat now runs everything (mod and server). First game on
 - Also seen (not fixed): wildlife_targets on a game that isn't the host ends a fight with a friend at once
   (`hosting()` in the g_fights loop) - by design the animal goes to that friend's game first.
 - UNTESTED in the game. tldserver.exe given to Karol in the chat (his rule: server files in the chat, mod on Discord).
+
+## 17.11 19:40 — no instant wolf on arrival (48ad3f2)
+- Shatsca 17.11 18:22: his game crashed changing region by train as a passenger (Szymon drove on: tldserver.log 23:01:54
+  Szymon into Section4, Shatsca timed out 23:02:01; that run's log is lost, rotated), and back on the server a wolf
+  jumped him at once and he died, so he Alt+F4'd and reloaded (twice). The server hands a player the wolves that were
+  after them. Now (wildlife_owner.inc take_local) in our first 20 s in a scene an animal handed to us that was after
+  us comes as Wander; TLD's own senses find us as on any arrival. DLL only; UNTESTED.
+- Still open: the crash at a train region change as a passenger (need coop.log right after it + Player-prev.log).
+- 17.11: GitHub's DISCORD_BOT_TOKEN is stale (401 since the PC bridge setup reset the token): with the PC off nothing
+  reaches Discord. Karol has to paste the new token into the repo secret. discord.yml now logs the error kind + HTTP code.
