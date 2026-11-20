@@ -1935,3 +1935,22 @@ Karol 16.11 22:55: this chat now runs everything (mod and server). First game on
 - Still open: the crash at a train region change as a passenger (need coop.log right after it + Player-prev.log).
 - 17.11: GitHub's DISCORD_BOT_TOKEN is stale (401 since the PC bridge setup reset the token): with the PC off nothing
   reaches Discord. Karol has to paste the new token into the repo secret. discord.yml now logs the error kind + HTTP code.
+
+## 20.11 23:50 — bridge stuck, old server exe, Shatsca's solo test (nothing in the mod changed; fixes WAIT for Karol)
+- #claude-komendy unanswered: the scheduled Discord checks had been stopped (19.11), and on 20.11 the PC bridge stuck
+  from 22:34 on `git pull`: "bad object refs/remotes/origin/main" (a fetch cut off, Wi-Fi). tldcoop-discord 816832f:
+  run_bridge.py drops the broken ref, gc, fetches again (tested on a clone with that exact error). On the PC the clone
+  was made again (`tldcoop-discord` cloned fresh in C:\tldserver), bridge back 23:38. Token was never the problem.
+- The server PC ran tldserver build 53743a6 (before 16.11: no carcass relay, no 15 s timeout). Swapped for 126dceb
+  (server-latest) 23:40. A second start_server.bat while the old exe ran looped on "bind 27015 failed".
+- The game is now **2.60 189457** (mod tested on 2.59 189140; coop.log warns). No breakage seen yet but one crash:
+  `0xC00000FD at AkSoundEngine.dll+0x228e67` (stack overflow on a Wwise thread, not ours; we hook PostEvent / Action /
+  StopPlayingID in wildlife_sync.cpp). Watch for more.
+- TO FIX (both Shatsca 20.11):
+  1. Dying stags on joining IslandATrackSection4: the server keeps ~16 dead-stag records at (-44..-36, 113-115, 559-575);
+     on a dedicated server take_local's "already lies here" (kTakeOld) can only Refuse (g_registry_drop is host-only),
+     so the server re-offers them every minute forever; the ones without a carcass get spawn_stand_in + kill -> the death
+     animation in front of the player. Needs: a way for a client to tell the server "drop this record" (Refuse with a
+     reason / new op -> server and DLL together), and a dead stand-in put straight into its final pose.
+  2. Train: N drives backwards, R forwards, train_flip doesn't help (REPORT #c62b1f01 in 20.11 22:16 zip).
+- Shatsca's logs: tldcoop-discord inbox/bledy/2026-11-20/ (vault).
