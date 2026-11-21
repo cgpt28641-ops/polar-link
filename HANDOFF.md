@@ -1968,3 +1968,17 @@ Karol 16.11 22:55: this chat now runs everything (mod and server). First game on
   too. Not an automatic fix: Shatsca's save keeps a train turned by older builds; one `train_flip` in the cab (F1)
   should set it right. If not, the logged axis/direction pair says what to do next.
 - UNTESTED in the game.
+
+## 21.11 15:40 — server: stop_server.bat, no double start, automatic update (polar-link-server 164b7a0, 4e1179e)
+- tldserver stops (world saved) when `stop_server.flag` appears beside it; tools/stop_server.bat writes it, waits
+  30 s, then kills the launcher / Discord helpers (by command line) and any tldserver.exe left. start_server.bat
+  refuses to start a second server. .gitattributes: *.bat CRLF; the release also has stop_server.bat.
+- server_bot.py Updater: every 10 min GET releases/tags/server-latest (unauthenticated), assets whose id isn't in
+  update_state.json are downloaded and compared byte for byte; different -> <name>.new. Nobody on the server
+  (status.json players empty) -> stop_server.flag; on its exit 0 the files are swapped (.old kept), Discord "🔄 Serwer
+  zaktualizowany (build X)", restart; a new server_bot.py restarts itself (subprocess.call); a new discord_chat.py
+  restarts the helper. New tldserver.exe failing 2 quick starts -> .old back, that asset id in "bad". A server that
+  ignores the flag for 2 min: no more update stops (goes in at the next stop by hand). no_auto_update.txt = off.
+  Tested on Linux with a fake server and a local fake GitHub (update and rollback). Windows UNTESTED.
+- From now on: a push to polar-link-server main -> CI -> the release -> the server PC updates itself when empty.
+  Server files no longer need to go to Karol by hand (only this server_bot.py once).
