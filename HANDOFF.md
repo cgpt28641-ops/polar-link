@@ -1982,3 +1982,15 @@ Karol 16.11 22:55: this chat now runs everything (mod and server). First game on
   Tested on Linux with a fake server and a local fake GitHub (update and rollback). Windows UNTESTED.
 - From now on: a push to polar-link-server main -> CI -> the release -> the server PC updates itself when empty.
   Server files no longer need to go to Karol by hand (only this server_bot.py once).
+
+## 21.11 16:00 — alt-tab audio crash, stag records merged (mod b27530d, server 77cddc3)
+- Shatsca 21.11 coop.log: lost focus 15:29:07, `0xC00000FD at AkSoundEngine.dll+0x228e67` 15:30:03 (same as 20.11).
+  Wwise's AkSoundEngineController.ActivateAudio(false, RenderDuringFocusLoss) suspends the engine on focus loss while
+  co-op keeps the game running and posting. core.cpp hooks ActivateAudio: in co-op a suspend gets renderAnyway=true
+  (Wwise keeps processing, silent). Log "the sound engine keeps processing (silent) in co-op". UNTESTED.
+- REPORT #90272959 "more deer carcasses on joining": no "already lies here" this time (TLD's save had none): all ~16
+  dead-stag records (4 spots) got stand-ins. Server: merge_dead_twins() every 30 s (frozen dead of a kind within
+  0.6 m: oldest id stays) + ingest drops a frozen dead record where a newly shared dead one of its kind lies. Mod:
+  take_local's "already lies here" also counts a stand-in still waiting to be killed (kill_pending).
+- REPORT #e296e689: train_flip turning the front works (Shatsca) ✅.
+- Auto update worked on the server PC: 14:32 UTC "🔄 Serwer zaktualizowany (build 4e1179e)".
