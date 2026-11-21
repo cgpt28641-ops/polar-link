@@ -1954,3 +1954,17 @@ Karol 16.11 22:55: this chat now runs everything (mod and server). First game on
      reason / new op -> server and DLL together), and a dead stand-in put straight into its final pose.
   2. Train: N drives backwards, R forwards, train_flip doesn't help (REPORT #c62b1f01 in 20.11 22:16 zip).
 - Shatsca's logs: tldcoop-discord inbox/bledy/2026-11-20/ (vault).
+
+## 21.11 13:50 — dying stags, train_flip (mod c37e373, server 768677b; no protocol change)
+- Dying stags (Shatsca 20.11 REPORT #095206d7): take_local's "already lies here" (kTakeOld) now Refuses with
+  `kRefuseDuplicate` (new optional flags byte after the epoch; older readers stop before it). tldserver
+  `Wildlife::refuse` and the mod's host_refuse forget such a dead record instead of re-offering it every minute.
+  Server test: tests/wildlife_test.cpp ("a body their save already has is forgotten"). A stand-in made for a dead
+  record (spawn_stand_in + kill_now) gets `Animator.Update(2 s)` each frame for 1.5 s (Owned.lie_down_until): the
+  death plays out at once instead of in front of the player. Needs the new tldserver.exe AND the new DLL.
+- Train (REPORT #c62b1f01, "N backwards, R forwards, train_flip doesn't help"): `train_flip` now turns Curvy's
+  OrientationAxis (Forward <-> Backward, as TLD's own TrainCar.PrepareTrainCarForTransition flip), `train_flip dir`
+  is the old direction-only one. Both log "orientation axis X, direction Y" before -> after; taking the cab logs it
+  too. Not an automatic fix: Shatsca's save keeps a train turned by older builds; one `train_flip` in the cab (F1)
+  should set it right. If not, the logged axis/direction pair says what to do next.
+- UNTESTED in the game.
