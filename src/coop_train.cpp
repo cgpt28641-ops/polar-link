@@ -363,6 +363,20 @@ void send(const Frame& f, bool reliable) {
     netrt::send_packet(w, reliable);
 }
 
+// "orientation axis Forward, direction Forward" of our train (for the log)
+std::string facing_text() {
+    Il2CppObject* ctl = g_ready ? controller() : nullptr;
+    if (!ctl) return "no train";
+    static const char* kAxis[] = {"Up", "Down", "Forward", "Backward", "Left", "Right"};
+    int32_t orient = -1, dir = -1;
+    if (api.get_orient) il2::invoke_value(api.get_orient, ctl, orient);
+    if (api.get_dir) il2::invoke_value(api.get_dir, ctl, dir);
+    char buf[96];
+    std::snprintf(buf, sizeof buf, "orientation axis %s, direction %s", orient >= 0 && orient < 6 ? kAxis[orient] : "?",
+                  dir == 0 ? "Forward" : dir == 1 ? "Backward" : "?");
+    return buf;
+}
+
 bool driven_by_other() { return g_owner != kNobody && g_owner != g_self; }
 
 // TLDCoop_DLC (Shatsca 13.11 00:16: "mamy na odwrót pociąg: Szymon przód ma tam, gdzie ja tył"): which end of the
@@ -1555,7 +1569,7 @@ void on_frame(const std::string& scene, bool in_game) {
         g_claim_pending = false;
         if (g_owner == kNobody) {
             g_owner = g_self;
-            logx::info("train: we're in the cab and nobody drives: we drive");
+            logx::info("train: we're in the cab and nobody drives: we drive (%s)", facing_text().c_str());
         } else if (g_owner != g_self) {
             logx::info("train: we're in the cab; player %d drives", g_owner);
         }
@@ -1593,17 +1607,36 @@ bool console(const std::string& line) {
     std::string cmd = line.substr(0, line.find(' '));
     for (char& c : cmd) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
     if (cmd != "train_flip" && cmd != "trainflip") return false;
+    std::string arg = line.find(' ') == std::string::npos ? "" : line.substr(line.find(' ') + 1);
+    for (char& c : arg) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
     Il2CppObject* ctl = g_ready ? controller() : nullptr;
     if (!ctl) {
         logx::info("train: train_flip: no train here");
         return true;
     }
-    int32_t dir = 0;
-    il2::invoke_value(api.get_dir, ctl, dir);
-    dir = dir == 0 ? 1 : 0;
-    void* a[] = {&dir};
-    il2::invoke(api.set_dir, ctl, a);
-    logx::info("train: train_flip: the train's direction is now %s", dir == 0 ? "forward" : "backward");
+    const std::string before = facing_text();
+    // TLDCoop_DLC (Shatsca 20.11 REPORT #c62b1f01: "N drives backwards, R forwards; train_flip doesn't help"): the
+    // movement direction alone is set again by TLD's engine; which end of the train is its front is Curvy's
+    // OrientationAxis (TLD's own flip, TrainCar.PrepareTrainCarForTransition, changes it). `train_flip` turns that;
+    // `train_flip dir` is the old one (the movement direction only).
+    const bool dir_only = arg.rfind("dir", 0) == 0;
+    if (!dir_only && api.get_orient && api.set_orient) {
+        int32_t orient = 0;
+        if (il2::invoke_value(api.get_orient, ctl, orient)) {
+            orient ^= 1;  // OrientationAxisEnum: Up 0 / Down 1, Forward 2 / Backward 3, Left 4 / Right 5
+            void* a[] = {&orient};
+            il2::invoke(api.set_orient, ctl, a);
+        }
+    } else {
+        int32_t dir = 0;
+        il2::invoke_value(api.get_dir, ctl, dir);
+        dir = dir == 0 ? 1 : 0;
+        void* a[] = {&dir};
+        il2::invoke(api.set_dir, ctl, a);
+    }
+    logx::info("train: train_flip%s: %s -> %s", dir_only ? " dir" : "", before.c_str(), facing_text().c_str());
+    // others follow the driver's frame (orient), so the next frame carries it; tell them now if we drive
+    if (g_owner == g_self) g_next_send = 0;
     return true;
 }
 

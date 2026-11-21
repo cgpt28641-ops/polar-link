@@ -1807,6 +1807,8 @@ constexpr uint8_t kTakeNoState = 4;  // Take: the old owner hasn't got it any mo
 constexpr uint8_t kTakeMoved = 8;    // v45 Take: nobody saw it for a while (hours): placed anew in its spawn region
 constexpr uint8_t kTakeOld = 32;     // TLDCoop_DLC Take (with kTakeDead): an old body (kept/frozen): not a fresh kill
 constexpr uint8_t kTakeBody = 16;    // v45 Take (with kTakeDead): `text` is its carcass (BodyHarvest.Serialize())
+// TLDCoop_DLC (20.11) Refuse flags (an optional byte after the epoch; no protocol change: older readers ignore it)
+constexpr uint8_t kRefuseDuplicate = 1;  // a dead body kept from before whose carcass already lies here: drop the record
 constexpr uint8_t kKillGone = 1;     // v45 Kill: it didn't die, it's just gone (TLD put it away): no respawn wait
 constexpr uint8_t kKillCounted = 2;  // v45 Kill: TLD's own spawn region bookkeeping already counted it where it died
 constexpr size_t kWildRegionsMax = 128;
@@ -1833,7 +1835,7 @@ struct WildCtlMsg {
     uint32_t id = 0;                       // Release, Take, Refuse
     uint8_t to = kNoPlayer;                // Release, Take: the new owner
     uint16_t epoch = 0;                    // Release, Take, Refuse: the handover this belongs to
-    uint8_t flags = 0;                     // Take: kTake*
+    uint8_t flags = 0;                     // Take: kTake*; Refuse: kRefuse*
     std::string scene;                     // Take
     AnimalRec state;                       // Take: as the old owner (or the registry) last had it
     std::string text;                      // Take: BaseAi.Serialize() ("" none); kTakeBody: BodyHarvest.Serialize()
@@ -1879,6 +1881,7 @@ inline void write_wild_ctl(Writer& w, const WildCtlMsg& m) {
         case WildOp::Gone:
             w.put(m.id);
             w.put(m.epoch);
+            if (m.op == WildOp::Refuse && m.flags) w.put(m.flags);  // (20.11) kRefuse*: older readers stop before it
             break;
         case WildOp::Kill:
             w.put(m.id);
@@ -1952,6 +1955,7 @@ inline bool read_wild_ctl(Reader& r, WildCtlMsg& m) {
         case WildOp::Gone:
             m.id = r.get<uint32_t>();
             m.epoch = r.get<uint16_t>();
+            if (m.op == WildOp::Refuse && r.ok() && r.left() >= 1) m.flags = r.get<uint8_t>();
             return r.ok();
         case WildOp::Kill:
             m.id = r.get<uint32_t>();

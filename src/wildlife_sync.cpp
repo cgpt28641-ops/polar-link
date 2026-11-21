@@ -97,6 +97,7 @@ struct Api {
 
     const MethodInfo* layer_count = nullptr;
     const MethodInfo* state_info = nullptr;     // GetCurrentAnimatorStateInfo(int)
+    const MethodInfo* animator_update = nullptr;  // Animator.Update(float): a body that died elsewhere lies down at once
     const MethodInfo* in_transition = nullptr;  // IsInTransition(int)
     const MethodInfo* param_count = nullptr;
     const MethodInfo* get_param = nullptr;      // GetParameter(int) -> AnimatorControllerParameter
@@ -2204,6 +2205,7 @@ bool init() {
 
     api.layer_count = il2::find_method(animator, "get_layerCount", 0);
     api.state_info = il2::find_method(animator, "GetCurrentAnimatorStateInfo", 1);
+    api.animator_update = il2::find_method_params_quiet(animator, "Update", {"System.Single"});
     api.in_transition = il2::find_method(animator, "IsInTransition", 1);
     api.param_count = il2::find_method(animator, "get_parameterCount", 0);
     api.get_param = il2::find_method(animator, "GetParameter", 1);

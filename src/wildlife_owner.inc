@@ -73,6 +73,7 @@ struct Owned {
     int rescued = 0;         // TLDCoop_DLC: times TLD switched it off right after we took it and we put it back
     bool item_made = false;  // TLDCoop_DLC: a dead rabbit/ptarmigan made a carcass item: forgotten when it goes
     bool old_body = false;   // TLDCoop_DLC: kTakeOld: not made fresh (condition, frost) when it comes
+    double lie_down_until = 0;  // TLDCoop_DLC: made for a body that died elsewhere: its death played out at once
 };
 std::map<uint32_t, Owned> g_owned;
 std::vector<uint32_t> g_registry_drop;  // TLDCoop_DLC: registry entries to forget once it isn't walked
@@ -483,11 +484,18 @@ void host_take(net::WildCtlMsg t, uint8_t from, double now) {
     deliver_take(t, now);
 }
 
-void host_refuse(uint32_t id, uint16_t epoch, uint8_t from, double now) {
+void host_refuse(uint32_t id, uint16_t epoch, uint8_t from, double now, uint8_t flags = 0) {
     const auto it = g_registry.find(id);
     if (it == g_registry.end()) return;
     Entry& e = it->second;
     if (e.owner != from || e.epoch != epoch) return;
+    if ((flags & net::kRefuseDuplicate) && (e.last.flags & net::kAnimalDead)) {
+        // TLDCoop_DLC (20.11): a body kept from before whose carcass their game's save already put back: the same one
+        logx::info("wildlife: %s already has #%u's carcass (from its save): the old record forgotten", who_name(from).c_str(), id);
+        g_registry_drop.push_back(id);
+        e.owner = net::kNoPlayer;
+        return;
+    }
     logx::info("wildlife: %s couldn't take #%u; someone else will (not them for a minute)", who_name(from).c_str(), id);
     if (from < net::kMaxPlayers) e.blocked_until[from] = now + kOwnBlockMs;
     e.owner = net::kNoPlayer;
@@ -897,7 +905,7 @@ void take_local(const net::WildCtlMsg& t, double now) {
         logx::info("wildlife: we already run #%u (epoch now %u)", t.id, t.epoch);
         return;
     }
-    auto refuse = [&](const char* why) {
+    auto refuse = [&](const char* why, uint8_t flags = 0) {
         logx::warn("wildlife: can't take #%u (%s): %s", t.id, kind_name(s.kind), why);
         if (hosting_now()) {
             host_refuse(t.id, t.epoch, 0, now);
@@ -907,6 +915,7 @@ void take_local(const net::WildCtlMsg& t, double now) {
         r.op = net::WildOp::Refuse;
         r.id = t.id;
         r.epoch = t.epoch;
+        r.flags = flags;
         send_ctl(r);
     };
     if (t.scene != g_own_scene) return refuse("we aren't in its scene");
@@ -944,7 +953,9 @@ void take_local(const net::WildCtlMsg& t, double now) {
                 g_registry_drop.push_back(t.id);  // (dropped after the registry's walk)
                 return;
             }
-            return refuse("its carcass already lies here");
+            // TLDCoop_DLC (Shatsca 20.11): on a dedicated server a plain Refuse only made the server offer it again every
+            // minute, forever (16 dead stags by the tracks); it says so, and the server drops the record
+            return refuse("its carcass already lies here", net::kRefuseDuplicate);
         }
     }
     if (dead_given) {
@@ -1330,6 +1341,20 @@ void own_capture(const std::string& scene, const std::vector<Present>& players, 
         if (own.kill_pending && now - own.since_ms > 200) {
             own.kill_pending = false;
             kill_now(ai);
+            own.lie_down_until = now + 1500;
+        }
+        // TLDCoop_DLC (Shatsca 20.11 REPORT #095206d7: "on joining the server dying deer appeared next to me"): one made
+        // for a carcass from before played TLD's death in front of the player. Its animator is run on to the end.
+        if (own.lie_down_until > 0) {
+            if (now > own.lie_down_until) {
+                own.lie_down_until = 0;
+            } else if (api.animator_update && dead_animal(ai)) {
+                if (Il2CppObject* anim = il2::read_field<Il2CppObject*>(ai, api.ai_animator); anim && alive(anim)) {
+                    float dt = 2.0f;
+                    void* args[] = {&dt};
+                    il2::invoke(api.animator_update, anim, args);
+                }
+            }
         }
         if (!own.reapplied && now - own.since_ms > 200) {
             // Made for it: TLD's Start gave it its own health meanwhile.
@@ -1687,7 +1712,7 @@ void own_receive(const std::string& scene, bool in_game, double now) {
                 else if (m.to == self_id()) take_local(m, now);
                 break;
             case net::WildOp::Refuse:
-                if (host) host_refuse(m.id, m.epoch, pk.from, now);
+                if (host) host_refuse(m.id, m.epoch, pk.from, now, m.flags);
                 break;
             case net::WildOp::Gone:
                 if (host) host_gone(m.id, pk.from);
