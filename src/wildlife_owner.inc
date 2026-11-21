@@ -938,8 +938,16 @@ void take_local(const net::WildCtlMsg& t, double now) {
     // one, its own carcass never made - gone for everyone. Only for a body kept from before (kTakeOld), and only at the
     // very same spot: the doubles lay 0.0-0.1 m apart.)
     if (dead_given && (t.flags & net::kTakeOld)) {
+        // (21.11: also one made a moment ago for another such record, not killed yet: 12 stand-ins on 4 spots)
+        auto dying = [](Il2CppObject* ai) {
+            const auto k = g_ids.find(reinterpret_cast<uintptr_t>(ai));
+            if (k == g_ids.end()) return false;
+            const auto o = g_owned.find(k->second);
+            return o != g_owned.end() && o->second.kill_pending;
+        };
         for (Il2CppObject* other : all_animals()) {
-            if (!alive(other) || il2::read_field<int32_t>(other, api.ai_kind) != s.kind || !dead_animal(other)) continue;
+            if (!alive(other) || il2::read_field<int32_t>(other, api.ai_kind) != s.kind || !(dead_animal(other) || dying(other)))
+                continue;
             Vector3 p{};
             if (!il2::invoke_value(api.get_position, transform_of(other), p)) continue;
             const float dx = p.x - pos.x, dy = p.y - pos.y, dz = p.z - pos.z;

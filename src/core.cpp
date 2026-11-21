@@ -764,6 +764,23 @@ void game_manager_on_focus_detour(Il2CppObject* self, bool focused, const Method
     g_game_manager_on_focus(self, focused, method);
 }
 
+// TLDCoop_DLC (Shatsca 20.11 / 21.11: "the game crashes when I come back from alt-tab, the sound stacks up";
+// 0xC00000FD in AkSoundEngine.dll on its own thread): on focus loss Wwise's Unity side suspends the sound engine
+// (AkSoundEngineController.ActivateAudio(false, renderAnyway = RenderDuringFocusLoss) -> AkSoundEngine.Suspend), but
+// in co-op the game keeps running and posting sounds; at WakeupFromSuspend the engine met all of them at once. In
+// co-op it is suspended with renderAnyway = true: Wwise goes on processing everything, only nothing is heard.
+using ActivateAudioFn = void (*)(Il2CppObject* self, bool activate, bool render_anyway, const MethodInfo* method);
+ActivateAudioFn g_activate_audio = nullptr;
+
+void activate_audio_detour(Il2CppObject* self, bool activate, bool render_anyway, const MethodInfo* method) {
+    if (!activate && !render_anyway && g_net_enabled) {
+        static int told = 0;
+        if (told++ < 3) logx::info("net: window lost focus: the sound engine keeps processing (silent) in co-op");
+        render_anyway = true;
+    }
+    g_activate_audio(self, activate, render_anyway, method);
+}
+
 // TLD's second focus-loss pause (registered in GameManager.Awake): sets m_IsPaused, which stops the clock and the
 // world while the window is in the background. Same treatment.
 using PauseWhenFocusLostFn = void (*)(bool focus_lost, const MethodInfo* method);
@@ -813,6 +830,10 @@ void install_hooks() {
         if (const MethodInfo* enable = il2::find_method_quiet(pm, "Enable", 1))
             hooks::install_method("Panel_PauseMenu.Enable", enable, reinterpret_cast<void*>(&pause_menu_enable_detour),
                                   reinterpret_cast<void**>(&g_pause_menu_enable));
+    if (Il2CppClass* ak = il2::find_class("AK.Wwise.Unity.MonoBehaviour.dll", "", "AkSoundEngineController"))
+        if (const MethodInfo* activate = il2::find_method_quiet(ak, "ActivateAudio", 2))
+            hooks::install_method("AkSoundEngineController.ActivateAudio", activate,
+                                  reinterpret_cast<void*>(&activate_audio_detour), reinterpret_cast<void**>(&g_activate_audio));
     if (const MethodInfo* pause = il2::find_method(game_manager, "PauseWhenFocusLost", 1))
         hooks::install_method("GameManager.PauseWhenFocusLost", pause,
                               reinterpret_cast<void*>(&pause_when_focus_lost_detour),
